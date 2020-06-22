@@ -24,7 +24,7 @@ const routes: Array<RouteConfig> = [
         path: "/game",
         name: "Game",
         component: Game
-    },
+    }
 ];
 
 const router = new VueRouter({

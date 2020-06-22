@@ -1,4 +1,8 @@
-export const sendSocket = (socket: WebSocket, category: string, data: unknown) => {
+export const sendSocket = (
+    socket: WebSocket,
+    category: string,
+    data: unknown
+) => {
     const stringified = JSON.stringify({ category, data });
     socket.send(stringified);
 };
