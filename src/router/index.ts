@@ -2,6 +2,8 @@ import Vue from "vue";
 import VueRouter, { RouteConfig } from "vue-router";
 import Home from "../views/Home.vue";
 import Game from "@/views/Game.vue";
+import Login from "@/views/Login.vue";
+import Queue from "@/views/Queue.vue";
 
 Vue.use(VueRouter);
 
@@ -24,6 +26,16 @@ const routes: Array<RouteConfig> = [
         path: "/game",
         name: "Game",
         component: Game
+    },
+    {
+        path: "/login",
+        name: "Login",
+        component: Login
+    },
+    {
+        path: "/queue",
+        name: "Queue",
+        component: Queue
     }
 ];
 
