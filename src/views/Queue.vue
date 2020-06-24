@@ -55,6 +55,9 @@ export default class Queue extends Vue {
         this.socket.addEventListener("message", event => {
             const { category, data } = websocketHandler(event.data);
             console.log(`Category: ${category} | ${JSON.stringify(data)}`);
+            if (category === "gameStarted") {
+                this.$store.commit("setGameKey", data);
+            }
         });
     }
 }
