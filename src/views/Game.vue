@@ -5,7 +5,7 @@
                 v-for="[index, val] in Object.entries(
                     Array(4)
                         .fill(null)
-                        .map((_, idx) => gameData.player2.cards[idx])
+                        .map((_, idx) => opponentCards[idx])
                 )"
                 :key="index"
                 class="cardSlot"
@@ -19,7 +19,7 @@
                 v-for="[index, val] in Object.entries(
                     Array(4)
                         .fill(null)
-                        .map((_, idx) => playerData.cards[idx])
+                        .map((_, idx) => allyCards[idx])
                 )"
                 :key="index"
                 class="cardSlot"
@@ -34,7 +34,9 @@
                 @click.native="parseClick('hand', card.id)"
             ></Card>
         </CardSlot>
-        {{ selections }} | {{ status }}
+        <button @click="endTurn">End turn</button>
+        {{ selections }} | {{ gameData }} | {{ gameKey }} | {{ gameID }} |
+        {{ flipped }} | {{ allyCards }}
     </div>
 </template>
 
@@ -44,14 +46,18 @@ import CardSlot from "@/components/CardSlot.vue";
 import Card from "@/components/Card.vue";
 import { sendSocket, websocketHandler } from "@/helpers/websocket";
 import * as config from "../assets/config";
+import { setWsHeartbeat } from "ws-heartbeat/client";
 @Component({
     components: { Card, CardSlot }
 })
 export default class Game extends Vue {
+    gameKey = this.$store.state.gameKey;
+    gameID = this.$store.state.gameId;
+    flipped = this.$store.state.gameFlipped;
     gameLoaded = false;
     socket: WebSocket = new WebSocket(config.wsUrl);
     playerData: Record<string, unknown> = {};
-    gameData: Record<string, unknown> = {};
+    gameData: Record<string, any> = {};
     status = "play";
     selections = {
         hand: -1,
@@ -60,6 +66,16 @@ export default class Game extends Vue {
     };
     get currentHand() {
         return this.playerData.hand;
+    }
+    get allyCards() {
+        return this.flipped
+            ? this.gameData.player2.cards
+            : this.gameData.player1.cards;
+    }
+    get opponentCards() {
+        return !this.flipped
+            ? this.gameData.player2.cards
+            : this.gameData.player1.cards;
     }
     parseClick(category: string, value: number) {
         if (!value) {
@@ -77,7 +93,7 @@ export default class Game extends Vue {
                 }
             } else if (this.status === "play") {
                 this.status = "attack";
-                this.selections.ally = this.playerData.cards[value].id;
+                this.selections.ally = this.allyCards[value].id;
             }
         } else if (category === "opponent") {
             if (this.selections.ally !== -1 && this.status === "attack") {
@@ -90,7 +106,8 @@ export default class Game extends Vue {
         if (this.status === "place") {
             if (this.selections.ally !== -1 && this.selections.hand !== -1) {
                 sendSocket(this.socket, "playCard", {
-                    id: 0,
+                    gameId: this.gameID,
+                    key: this.gameKey,
                     cardId: this.selections.hand,
                     slot: this.selections.ally
                 });
@@ -101,6 +118,7 @@ export default class Game extends Vue {
         }
     }
     attackCard() {
+        console.log("Attacking");
         if (this.status === "attack") {
             if (
                 this.selections.ally !== -1 &&
@@ -108,7 +126,8 @@ export default class Game extends Vue {
             ) {
                 console.log(this.selections);
                 sendSocket(this.socket, "attackCard", {
-                    id: 0,
+                    gameId: this.gameID,
+                    key: this.gameKey,
                     cardId: this.selections.ally,
                     receiverId: this.selections.opponent
                 });
@@ -118,19 +137,29 @@ export default class Game extends Vue {
             }
         }
     }
+    endTurn() {
+        sendSocket(this.socket, "endTurn", {
+            gameId: this.gameID,
+            key: this.gameKey
+        });
+    }
     mounted() {
+        setWsHeartbeat(this.socket, '{"category":"ping"}');
         // Connection opened
         this.socket.addEventListener("open", () => {
-            sendSocket(this.socket, "newgame", "Hi!");
+            sendSocket(this.socket, "joinGame", {
+                gameId: this.gameID,
+                key: this.gameKey
+            });
         });
 
         // Listen for messages
         this.socket.addEventListener("message", event => {
             const { category, data } = websocketHandler(event.data);
-            console.log(`Category: ${category} | ${JSON.stringify(data)}`);
             if (category === "playerData") {
                 this.playerData = data;
             } else if (category === "gameData") {
+                console.log("Setting game data");
                 this.gameData = data;
             } else if (category === "gameLoaded") {
                 this.gameLoaded = true;
