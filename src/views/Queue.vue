@@ -7,13 +7,14 @@
 </template>
 
 <script lang="ts">
+import { setWsHeartbeat } from "ws-heartbeat/client";
 import { Component, Vue } from "vue-property-decorator";
 import * as config from "@/assets/config";
 import { sendSocket, websocketHandler } from "@/helpers/websocket";
 
 @Component
 export default class Queue extends Vue {
-    status = null as unknown;
+    status = { message: null } as Record<string, unknown>;
     loaded = false;
     socket: WebSocket = new WebSocket(config.wsUrl);
 
@@ -26,8 +27,9 @@ export default class Queue extends Vue {
             },
             body: JSON.stringify({})
         });
-        this.status = await resp.text();
-        sendSocket(this.socket, "awaitMatch", "");
+        this.status = await resp.json();
+        console.log(`Sending: ${this.status.id}`);
+        sendSocket(this.socket, "awaitMatch", this.status.id);
     }
 
     async leave() {
@@ -39,10 +41,11 @@ export default class Queue extends Vue {
             },
             body: JSON.stringify({})
         });
-        this.status = await resp.text();
+        this.status = await resp.json();
     }
 
     mounted() {
+        setWsHeartbeat(this.socket, '{"category":"ping"}');
         // Connection opened
         this.socket.addEventListener("open", () => {
             this.loaded = true;
