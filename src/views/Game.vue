@@ -49,7 +49,10 @@
                 :class="{
                     playable:
                         status === 'place' &&
-                        playableSpots.some(l => l === Number(index))
+                        playableSpots.some(l => l === Number(index)),
+                    interactable:
+                        status === 'play' &&
+                        interactableSpots.some(l => l === Number(index))
                 }"
                 :key="index"
                 class="cardSlot"
@@ -77,7 +80,7 @@ import Card from "@/components/Card.vue";
 import { sendSocket, websocketHandler } from "@/helpers/websocket";
 import * as config from "../assets/config";
 import { setWsHeartbeat } from "ws-heartbeat/client";
-import { httpUrl } from "../assets/config";
+import { httpUrl } from "@/assets/config";
 @Component({
     components: { Card, CardSlot }
 })
@@ -93,6 +96,7 @@ export default class Game extends Vue {
     player2username = null as string | null;
     playableSpots = [] as number[];
     attackableSpots = [] as number[];
+    interactableSpots = [] as number[];
     status = "play";
     selections = {
         hand: -1,
@@ -119,10 +123,7 @@ export default class Game extends Vue {
         console.log(value);
         if (category === "hand") {
             this.selections.hand = value;
-            sendSocket(this.socket, "playableSpots", {
-                gameId: this.gameID,
-                key: this.gameKey
-            });
+            this.getSpotData("playableSpots");
             this.status = "place";
         } else if (category === "ally") {
             if (this.status === "place") {
@@ -131,12 +132,11 @@ export default class Game extends Vue {
                     this.moveCard();
                 }
             } else if (this.status === "play") {
-                sendSocket(this.socket, "attackableSpots", {
-                    gameId: this.gameID,
-                    key: this.gameKey
-                });
-                this.status = "attack";
-                this.selections.ally = this.allyCards[value].id;
+                if (this.interactableSpots.some(l => Number(value) === l)) {
+                    this.getSpotData("attackableSpots");
+                    this.status = "attack";
+                    this.selections.ally = this.allyCards[value].id;
+                }
             }
         } else if (category === "opponent") {
             if (this.selections.ally !== -1 && this.status === "attack") {
@@ -144,6 +144,14 @@ export default class Game extends Vue {
                 this.attackCard();
             }
         }
+    }
+    getSpotData(
+        category: "playableSpots" | "attackableSpots" | "interactableSpots"
+    ) {
+        sendSocket(this.socket, category, {
+            gameId: this.gameID,
+            key: this.gameKey
+        });
     }
     moveCard() {
         if (this.status === "place") {
@@ -158,17 +166,16 @@ export default class Game extends Vue {
                 this.status = "play";
                 this.selections.hand = -1;
                 this.selections.ally = -1;
+                this.getSpotData("interactableSpots");
             }
         }
     }
     attackCard() {
-        console.log("Attacking");
         if (this.status === "attack") {
             if (
                 this.selections.ally !== -1 &&
                 this.selections.opponent !== -1
             ) {
-                console.log(this.selections);
                 sendSocket(this.socket, "attackCard", {
                     gameId: this.gameID,
                     key: this.gameKey,
@@ -178,6 +185,7 @@ export default class Game extends Vue {
                 this.status = "play";
                 this.selections.opponent = -1;
                 this.selections.ally = -1;
+                this.getSpotData("interactableSpots");
             }
         }
     }
@@ -229,10 +237,17 @@ export default class Game extends Vue {
                 }
             } else if (category === "gameLoaded") {
                 this.gameLoaded = true;
-            } else if (category === "playableSpots") {
-                this.playableSpots = data;
-            } else if (category === "attackableSpots") {
-                this.attackableSpots = data;
+            } else if (
+                category === "playableSpots" ||
+                category === "attackableSpots" ||
+                category === "interactableSpots"
+            ) {
+                this[
+                    category as
+                        | "playableSpots"
+                        | "attackableSpots"
+                        | "interactableSpots"
+                ] = data;
             }
         });
     }
@@ -251,5 +266,9 @@ export default class Game extends Vue {
 .attackable {
     border-color: mediumpurple;
     box-shadow: 0 0 5px 1px mediumpurple;
+}
+.interactable {
+    border-color: darkcyan;
+    box-shadow: 0 0 5px 1px darkcyan;
 }
 </style>
