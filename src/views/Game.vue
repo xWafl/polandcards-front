@@ -2,12 +2,26 @@
     <div class="game" v-if="gameLoaded">
         <div class="opponent">
             {{ flipped ? player1username : player2username }}
+            {{
+                flipped
+                    ? gameData.board.player1move
+                        ? "His turn"
+                        : ""
+                    : gameData.board.player1move
+                    ? ""
+                    : "His turn"
+            }}
             <CardSlot
                 v-for="[index, val] in Object.entries(
                     Array(4)
                         .fill(null)
                         .map((_, idx) => opponentCards[idx])
                 )"
+                :class="{
+                    attackable:
+                        status === 'attack' &&
+                        attackableSpots.some(l => l === Number(index))
+                }"
                 :key="index"
                 class="cardSlot"
                 @click.native="parseClick('opponent', val ? val.id : null)"
@@ -17,12 +31,26 @@
         </div>
         <div class="player">
             {{ flipped ? player2username : player1username }}
+            {{
+                !flipped
+                    ? gameData.board.player1move
+                        ? "Your turn"
+                        : ""
+                    : gameData.board.player1move
+                    ? ""
+                    : "Your turn"
+            }}
             <CardSlot
                 v-for="[index, val] in Object.entries(
                     Array(4)
                         .fill(null)
                         .map((_, idx) => allyCards[idx])
                 )"
+                :class="{
+                    playable:
+                        status === 'place' &&
+                        playableSpots.some(l => l === Number(index))
+                }"
                 :key="index"
                 class="cardSlot"
                 @click.native="parseClick('ally', index)"
@@ -38,7 +66,7 @@
         </CardSlot>
         <button @click="endTurn">End turn</button>
         {{ selections }} | {{ gameData }} | {{ gameKey }} | {{ gameID }} |
-        {{ flipped }} | {{ allyCards }} | {{ player1username }} | {{ player2username }}
+        {{ flipped }} | {{ playableSpots }}
     </div>
 </template>
 
@@ -63,6 +91,8 @@ export default class Game extends Vue {
     gameData: Record<string, any> = {};
     player1username = null as string | null;
     player2username = null as string | null;
+    playableSpots = [] as number[];
+    attackableSpots = [] as number[];
     status = "play";
     selections = {
         hand: -1,
@@ -89,6 +119,10 @@ export default class Game extends Vue {
         console.log(value);
         if (category === "hand") {
             this.selections.hand = value;
+            sendSocket(this.socket, "playableSpots", {
+                gameId: this.gameID,
+                key: this.gameKey
+            });
             this.status = "place";
         } else if (category === "ally") {
             if (this.status === "place") {
@@ -97,6 +131,10 @@ export default class Game extends Vue {
                     this.moveCard();
                 }
             } else if (this.status === "play") {
+                sendSocket(this.socket, "attackableSpots", {
+                    gameId: this.gameID,
+                    key: this.gameKey
+                });
                 this.status = "attack";
                 this.selections.ally = this.allyCards[value].id;
             }
@@ -116,6 +154,7 @@ export default class Game extends Vue {
                     cardId: this.selections.hand,
                     slot: this.selections.ally
                 });
+                this.playableSpots = [];
                 this.status = "play";
                 this.selections.hand = -1;
                 this.selections.ally = -1;
@@ -161,6 +200,7 @@ export default class Game extends Vue {
         // Listen for messages
         this.socket.addEventListener("message", async event => {
             const { category, data } = websocketHandler(event.data);
+            console.log(`Received ${category} | `, data);
             if (category === "playerData") {
                 this.playerData = data;
             } else if (category === "gameData") {
@@ -189,6 +229,10 @@ export default class Game extends Vue {
                 }
             } else if (category === "gameLoaded") {
                 this.gameLoaded = true;
+            } else if (category === "playableSpots") {
+                this.playableSpots = data;
+            } else if (category === "attackableSpots") {
+                this.attackableSpots = data;
             }
         });
     }
@@ -199,5 +243,13 @@ export default class Game extends Vue {
 <style scoped lang="scss">
 .cardSlot {
     display: inline-block;
+}
+.playable {
+    border-color: green;
+    box-shadow: 0 0 5px 1px green;
+}
+.attackable {
+    border-color: mediumpurple;
+    box-shadow: 0 0 5px 1px mediumpurple;
 }
 </style>
