@@ -1,6 +1,7 @@
 <template>
     <div class="game" v-if="gameLoaded">
         <div class="opponent">
+            {{ flipped ? player1username : player2username }}
             <CardSlot
                 v-for="[index, val] in Object.entries(
                     Array(4)
@@ -15,6 +16,7 @@
             </CardSlot>
         </div>
         <div class="player">
+            {{ flipped ? player2username : player1username }}
             <CardSlot
                 v-for="[index, val] in Object.entries(
                     Array(4)
@@ -36,7 +38,7 @@
         </CardSlot>
         <button @click="endTurn">End turn</button>
         {{ selections }} | {{ gameData }} | {{ gameKey }} | {{ gameID }} |
-        {{ flipped }} | {{ allyCards }}
+        {{ flipped }} | {{ allyCards }} | {{ player1username }} | {{ player2username }}
     </div>
 </template>
 
@@ -47,6 +49,7 @@ import Card from "@/components/Card.vue";
 import { sendSocket, websocketHandler } from "@/helpers/websocket";
 import * as config from "../assets/config";
 import { setWsHeartbeat } from "ws-heartbeat/client";
+import { httpUrl } from "../assets/config";
 @Component({
     components: { Card, CardSlot }
 })
@@ -58,6 +61,8 @@ export default class Game extends Vue {
     socket: WebSocket = new WebSocket(config.wsUrl);
     playerData: Record<string, unknown> = {};
     gameData: Record<string, any> = {};
+    player1username = null as string | null;
+    player2username = null as string | null;
     status = "play";
     selections = {
         hand: -1,
@@ -69,13 +74,13 @@ export default class Game extends Vue {
     }
     get allyCards() {
         return this.flipped
-            ? this.gameData.player2.cards
-            : this.gameData.player1.cards;
+            ? this.gameData.board.player2.cards
+            : this.gameData.board.player1.cards;
     }
     get opponentCards() {
         return !this.flipped
-            ? this.gameData.player2.cards
-            : this.gameData.player1.cards;
+            ? this.gameData.board.player2.cards
+            : this.gameData.board.player1.cards;
     }
     parseClick(category: string, value: number) {
         if (!value) {
@@ -154,13 +159,34 @@ export default class Game extends Vue {
         });
 
         // Listen for messages
-        this.socket.addEventListener("message", event => {
+        this.socket.addEventListener("message", async event => {
             const { category, data } = websocketHandler(event.data);
             if (category === "playerData") {
                 this.playerData = data;
             } else if (category === "gameData") {
-                console.log("Setting game data");
                 this.gameData = data;
+                if (!this.player1username) {
+                    const resp = await fetch(
+                        `${httpUrl}/api/users/userData/id/${data.player1}`
+                    );
+                    if (resp.status === 400) {
+                        this.player1username = "Undefined user";
+                    } else {
+                        const response = await resp.json();
+                        this.player1username = response.username;
+                    }
+                }
+                if (!this.player2username) {
+                    const resp = await fetch(
+                        `${httpUrl}/api/users/userData/id/${data.player2}`
+                    );
+                    if (resp.status === 400) {
+                        this.player2username = "Undefined user";
+                    } else {
+                        const response = await resp.json();
+                        this.player2username = response.username;
+                    }
+                }
             } else if (category === "gameLoaded") {
                 this.gameLoaded = true;
             }
